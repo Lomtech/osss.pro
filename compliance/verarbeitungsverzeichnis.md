@@ -36,6 +36,7 @@
 | V8 | Fehler-Tracking (Sentry) | App-Stabilität, Bug-Diagnose | Art. 6(1)(f) |
 | V9 | Sales-CRM (intern) | Kaltakquise von Gym-Inhabern | Art. 6(1)(f) — siehe Risikohinweis V9 |
 | V10 | Onboarding / Setup-Wizard | Erste Konfiguration durch Gym-Owner | Art. 6(1)(b) |
+| V11 | Forderungsbeitreibung (Inkasso) | Übergabe offener Forderungen an Paywise | Art. 6(1)(b), (f) |
 
 ---
 
@@ -288,8 +289,25 @@ poststelle@lda.bayern.de
 
 ---
 
+## V11 — Forderungsbeitreibung (Inkasso)
+
+| Feld | Eintrag |
+|---|---|
+| **Zweck** | Übergabe offener, fälliger Mitgliedsforderungen an den Inkassodienstleister Paywise (paywise.de) zur außergerichtlichen Beitreibung, nachdem das gym-eigene Mahnverfahren (V1/V6) erfolglos blieb |
+| **Rechtsgrundlage** | Art. 6(1)(b) DSGVO (Durchsetzung der Beitragsforderung aus dem Mitgliedsvertrag) + Art. 6(1)(f) (berechtigtes Interesse an der Realisierung offener Forderungen) |
+| **Betroffene Personen** | Säumige Mitglieder (Schuldner) der angeschlossenen Gyms |
+| **Datenkategorien** | Vor-/Nachname, Anschrift, E-Mail, Telefon, Geburtsdatum; Forderungsdaten: offener Betrag, Rechnungsnummer, Rechnungs-/Fälligkeitsdatum, Verzugsbeginn, Mahnhistorie |
+| **Empfänger** | **Paywise** (Inkassodienstleister, Deutschland). osss.pro übermittelt im Auftrag/auf Weisung des jeweiligen Gyms via API. |
+| **Drittlandtransfer** | **Keiner** — Paywise verarbeitet in Deutschland/EU. |
+| **Speicherdauer** | Bis Abschluss des Inkassoverfahrens; forderungsrelevante Daten anschließend 10 Jahre (§ 257 HGB / § 147 AO) |
+| **TOMs** | TLS 1.3 in-transit, API-Token-Auth (getrennt Test/Prod), HMAC-SHA256-signierte Status-Webhooks; Übergabe opt-in pro Gym (`dunning_auto_inkasso_enabled`) oder manuell |
+| **Bemerkung** | Zwei-Stufen-Modell: **Gym = Verantwortlicher** für die Forderungs-/Schuldnerdaten, **osss.pro = Auftragsverarbeiter** (technische Übermittlung), **Paywise = Empfänger/Inkassodienstleister**. Die datenschutzrechtliche Rolle von Paywise (Auftragsverarbeiter vs. eigene Verantwortlichkeit) ist vertraglich zu fixieren. **AVV/Datenübermittlungsvereinbarung mit Paywise noch zu unterschreiben** (Voraussetzung vor dem ersten Echtfall). Mitglieder sind in der Datenschutzerklärung über die mögliche Inkasso-Übergabe zu informieren. |
+
+---
+
 ## 6. Änderungshistorie
 
 | Datum | Änderung | Geändert von |
 |---|---|---|
 | 2026-05-06 | Erstellung des Verzeichnisses | Lom-Ali Imadaev |
+| 2026-06-18 | V11 Forderungsbeitreibung (Paywise-Inkasso) ergänzt | Lom-Ali Imadaev / Claude |
