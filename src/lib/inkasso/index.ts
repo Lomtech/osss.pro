@@ -12,8 +12,10 @@
 
 import { registerProvider } from './provider'
 import { SandboxProvider } from './sandbox'
+import { PaywiseProvider } from './paywise'
 
 export * from './provider'
+export { PaywiseProvider } from './paywise'
 
 let booted = false
 
@@ -24,6 +26,11 @@ export function initInkassoProviders(): void {
   // Sandbox (dev/test) — deterministic, no network. Maps to the 'other' slot.
   const sandbox = new SandboxProvider()
   if (sandbox.isConfigured()) registerProvider(sandbox)
+
+  // Paywise (paywise.de) — registriert, sobald INKASSO_PAYWISE_API_TOKEN gesetzt ist.
+  // Siehe docs/INKASSO_PAYWISE_MAPPING.md.
+  const paywise = new PaywiseProvider()
+  if (paywise.isConfigured()) registerProvider(paywise)
 
   // ── Real providers plug in here once under contract ──────────────────────
   // import { FinionFairPayProvider } from './fair-pay'

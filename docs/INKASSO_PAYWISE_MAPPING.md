@@ -56,9 +56,15 @@ Paywise-gehostete Seite: der **Gym-Inhaber** macht **selbst** KYC, hinterlegt IB
 Vertreter und **akzeptiert Paywise' Bedingungen**. osss.pro bekommt am Ende `company_id` + `user_id`.
 → Sauber, weil die Inkasso-Beauftragung rechtlich dem Gym gehört, nicht dir.
 
-### 3.2 Weg B — API-only (`POST /partner/v1/companies/`)
-Vollautomatisch, aber osss.pro müsste die **Beauftragung des Gyms vorab einholen + dokumentieren**
-(Opt-in im Dashboard + AGB/AVV-Klausel), und IBAN/Rechtsform/Vertreter selbst erheben.
+### 3.2 Weg B — API-only ✅ **GEWÄHLT**
+Vollautomatisch via `PaywiseProvider.onboardCompany()`:
+1. `POST /partner/v1/companies/` (alle relevanten Daten) → `company_id`
+2. `POST /partner/v1/users/` (≥1 User = Gym-Owner) → `user_id`
+3. der User bekommt eine **Invite-Mail** (E-Mail-Verifizierung **+** Passwort setzen) — d. h. ein minimaler Gym-Schritt bleibt; danach `data_submission_completed` prüfen.
+
+**Harte Voraussetzungen (vom User mit Paywise zu klären):**
+- Der Partner-Key braucht die Permission **`API_ONLY_ONBOARDING`** (sonst liefert `POST /partner/v1/users/` 400). → bei Paywise anfragen.
+- osss.pro muss die **Beauftragung des Gyms vorab einholen + dokumentieren**: Opt-in im Dashboard (`gyms.paywise_consent_at`) + AGB/AVV-Klausel. IBAN/Rechtsform/Vertreter selbst erheben (Felder in `onboardCompany`-Input).
 
 ### 3.3 Company-Feld-Mapping (`POST /partner/v1/companies/`)
 
@@ -139,28 +145,34 @@ Unser `dunning_handoffs.amount_cents` ist der Gesamtbetrag → aufteilen:
 
 ---
 
-## 5. Status verfolgen — **Polling, KEIN Webhook**
+## 5. Status verfolgen — **Webhooks** (seit Mai 2026 verfügbar)
 
-Paywise hat **keinen Webhook-Endpoint** → der `parseWebhook`/`verifyWebhook`-Pfad bleibt für
-Push-Provider, Paywise braucht einen **Status-Poll-Cron** (z. B. stündlich, Inngest/Vercel-Cron):
+> **Korrektur ggü. erster Einschätzung:** Paywise hat **doch Webhooks** (Release-Notes Mai 2026)
+> → das passt 1:1 auf unseren bestehenden Receiver `/api/inkasso/webhook/<provider>`. Kein
+> Poll-Cron nötig; ein Reconciliation-Poll ist nur optionales Backstop.
 
-1. offene `dunning_handoffs` (status ∈ sent_to_provider/accepted) laden,
-2. `GET /v1/claims/{id}` (`submission_state`) + `GET /v1/mandates/{id}/status-updates` pollen,
-3. auf `HandoffStatus` mappen (gleiche Persist-Logik wie der Webhook-Receiver).
+- **Endpoint:** `POST /api/inkasso/webhook/paywise` (Receiver existiert, provider-agnostisch).
+- **Signatur:** Header **`X-Paywise-Signature: sha256=<hex>`** = HMAC-SHA256 des **rohen Bodys** mit dem Endpoint-Secret. Weitere Header: `X-Paywise-Event`, `X-Paywise-Delivery-ID`. → `PaywiseProvider.verifyWebhook` macht genau das (constant-time).
+- **Payload:** `{ "event": "...", "timestamp": "...", "data": { "company_id", "access_mode", ... } }`.
+- **Endpoint registrieren:** einmal über die Webhooks-Manage-API (`manage-endpoints`) oder im Paywise-Dashboard; Secret → `INKASSO_PAYWISE_WEBHOOK_SECRET`.
 
-| Paywise | → `HandoffStatus` |
+Event → `HandoffStatus` (in `PaywiseProvider.parseWebhook`):
+
+| Paywise-Event | → `HandoffStatus` |
 |---|---|
-| `submission_state` = released / under_review / client_response_pending | `sent_to_provider` |
-| `submission_state` = accepted (in Mandate) | `accepted` |
-| `submission_state` = rejected | `rejected` |
-| Mandate-Status-Update „bezahlt" | `paid` → `closed_at` |
-| Mandate-Status-Update „niedergeschlagen/storniert" | `written_off` / `closed` |
+| `mandate.status_updated` | `accepted` (Mandat in Bearbeitung) |
+| `mandate.closed` (Payload „paid/bezahlt") | `paid` → `closed_at` |
+| `mandate.closed` (Payload „written_off/niedergeschlagen/storniert") | `written_off` |
+| `mandate.closed` (sonst) | `closed` |
+| `claim.created` / `claim.updated` / `mandate.balance_updated` / `mandate.message_created` / `payment.*` | — (informativ, keine Transition) |
 
-> Die exakten Mandate-Status-Werte (Schritt „paid/written_off") stehen in
-> `mandates/list-status-updates` — beim Bauen gegen die Werteliste mappen (§9).
+> **§9-Restpunkt:** die exakte per-Event-`data`-Shape (wo die Claim-ID / `your_reference` steckt) +
+> die genauen `mandate.closed`-Gründe gegen `webhooks/event-types` final abgleichen. `parseWebhook`
+> extrahiert die Referenz heute defensiv (`your_reference` → `claim`/`claim_id`/`id`).
 
 **Rückfragen (Requests to Client):** `GET /v1/mandates/{id}/requests-to-client` → im Dashboard
-anzeigen, Owner antwortet (`submit answer` + ggf. Doc-Upload).
+anzeigen, Owner antwortet (`submit answer` + ggf. Doc-Upload). Optionaler Reconciliation-Poll
+(`GET /v1/claims/{id}`) als Backstop, falls ein Webhook mal verloren geht.
 
 ---
 
@@ -187,8 +199,9 @@ Trigger: Stripe-Webhook/Manuelle-Zahlung auf ein Member mit offenem Handoff → 
 ## 8. Env-Vars (`.env.example` **und** Vercel/Coolify)
 
 ```
-INKASSO_PAYWISE_PARTNER_TOKEN=     # Partner API (Companies/Users)
-INKASSO_PAYWISE_API_TOKEN=         # Case-Management API (Claims/Debtors)
+INKASSO_PAYWISE_API_TOKEN=         # Case-Management API (Claims/Debtors) — aktiviert den Provider 'paywise'
+INKASSO_PAYWISE_PARTNER_TOKEN=     # Partner API (Companies/Users); Key braucht Permission API_ONLY_ONBOARDING
+INKASSO_PAYWISE_WEBHOOK_SECRET=    # HMAC-SHA256-Secret des Webhook-Endpoints (Header X-Paywise-Signature)
 INKASSO_PAYWISE_BASE_URL=https://api.paywise.de
 # Test- und Prod-Token sind verschieden — in Preview die Test-Keys.
 ```
@@ -209,13 +222,19 @@ INKASSO_PAYWISE_BASE_URL=https://api.paywise.de
 
 ---
 
-## 10. Bau-Reihenfolge (nach Mapping-Freigabe)
+## 10. Bau-Reihenfolge / Stand
 
-1. **Migration** — `gyms.paywise_*`-Spalten + `'paywise'` im `provider`-CHECK.
-2. **Onboarding** — Web-Flow-Anbindung + Dashboard-Opt-in („Inkasso aktivieren") + `company_id/user_id` speichern.
-3. **`PaywiseProvider`-Adapter** (`src/lib/inkasso/paywise.ts`) — `submitCase` (4-Step) + Betrags-Split + Mapping aus §4.
-4. **Status-Poll-Cron** — `src/app/api/cron/inkasso-poll/route.ts` (mit `cronGuard`), Mapping aus §5.
-5. **Direktzahlungs-Meldung** — in den Stripe-/Manuell-Zahlungs-Pfad einhängen (§6).
-6. **Tests** — `tests/unit/inkasso.test.ts` erweitern (gemockter `fetch`: debtor/claim/release ok+Fehler, Status-Mapping, Betrags-Split).
-7. **DSGVO** — AVV mit Paywise + Verarbeitungsverzeichnis „V11 — Forderungsbeitreibung" + Datenschutzerklärung (siehe Playbook Phase 0.3).
-8. **Test-Mode-Durchlauf** → erster kontrollierter Echtfall → Go-live.
+✅ = in diesem Increment gebaut + verifiziert (tsc 0, vitest 19/19, osss-audit 0).
+
+1. ✅ **Migration** `supabase/migrations/0018_paywise_inkasso.sql` — `gyms.paywise_*`-Spalten + `'paywise'` im `provider`-CHECK. *(Datei da; auf Live-DB noch anzuwenden.)*
+2. ✅ **`PaywiseProvider`-Adapter** (`src/lib/inkasso/paywise.ts`) — `submitCase` (4-Step) + Betrags-Split + `verifyWebhook` (HMAC) + `parseWebhook` + `onboardCompany` (API-only). Registriert in `index.ts`, Env in `.env.example`, Provider-Slot `'paywise'`.
+3. ✅ **Tests** — `tests/unit/inkasso.test.ts` (9 Paywise-Tests: submitCase-Sequenz/Betrags-Split/Pflichtfeld-Guard, HMAC-verify, parseWebhook-Mapping).
+4. ⬜ **Onboarding-Wiring** — Dashboard-Opt-in („Inkasso aktivieren", schreibt `paywise_consent_at`) → ruft `onboardCompany()` → speichert `company_id`/`user_id` auf dem Gym.
+5. ⬜ **Handoff-Route anreichern** — `InkassoCase.claim` + `providerUserId` + `documents` aus `payments`/`members`/Mahn-Daten füllen (Datums-Defaults s. u.) + Adress-Strukturierung.
+6. ⬜ **Webhook-Endpoint registrieren** (`/api/inkasso/webhook/paywise`) + Secret setzen; optional Reconciliation-Poll-Cron als Backstop.
+7. ⬜ **Direktzahlungs-Meldung** (§6) im Stripe-/Manuell-Zahlungs-Pfad.
+8. ⬜ **DSGVO** — AVV mit Paywise + Verarbeitungsverzeichnis „V11 — Forderungsbeitreibung" + Datenschutzerklärung (Playbook Phase 0.3).
+9. ⬜ **Voraussetzungen + Go-live** — `API_ONLY_ONBOARDING`-Permission + Test-Keys von Paywise → Test-Mode-Durchlauf → erster Echtfall.
+
+**Gewählte §9-Defaults (automatisierungsfreundlich, im Adapter umgesetzt/erwartet):**
+`occurence_date`=`document_date`=`issued_at` · `due_date`=`payments.due_date` · `delay_date`=`due_date`+30 T (§286 Abs. 3 BGB) · `reminder_date`=Datum der ersten echten Mahnung · Betrag=Hauptforderung (Prinzipal); Verzugskosten überlässt v1 dem Inkasso (kein double-charging) · `{value}`=Dezimal-Euro mit Punkt.

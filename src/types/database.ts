@@ -181,6 +181,11 @@ export interface Database {
           dunning_late_fee_cents: number
           dunning_days_to_level_2: number
           dunning_days_to_level_3: number
+          // Paywise-Inkasso (Migration 0018) — Company/User des Gyms bei Paywise
+          paywise_company_id: string | null
+          paywise_user_id: string | null
+          paywise_status: string | null
+          paywise_consent_at: string | null
         }
         Insert: {
           owner_id: string

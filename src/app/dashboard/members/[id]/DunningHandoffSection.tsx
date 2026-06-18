@@ -12,7 +12,7 @@ import { Scale, Plus, X, FileDown, Check, AlertCircle } from 'lucide-react'
 import { useToast } from '@/components/Toast'
 import { createClient } from '@/lib/supabase/client'
 
-type Provider = 'sport_alliance' | 'fair_pay' | 'eos' | 'creditreform' | 'riverty' | 'manual' | 'other'
+type Provider = 'sport_alliance' | 'fair_pay' | 'eos' | 'creditreform' | 'riverty' | 'manual' | 'other' | 'paywise'
 type HandoffStatus = 'initiated' | 'pdf_exported' | 'sent_to_provider' | 'accepted' | 'rejected' | 'paid' | 'written_off' | 'closed'
 
 interface Handoff {
@@ -44,6 +44,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   riverty:        'Riverty (ehem. AfterPay/Arvato)',
   manual:         'Manuell (PDF runterladen)',
   other:          'Sonstiger Anbieter',
+  paywise:        'Paywise',
 }
 
 const STATUS_LABELS: Record<HandoffStatus, string> = {

@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic'
 
 const VALID_PROVIDERS = new Set([
   'sport_alliance', 'fair_pay', 'eos', 'creditreform',
-  'riverty', 'manual', 'other',
+  'riverty', 'manual', 'other', 'paywise',
 ])
 
 /**

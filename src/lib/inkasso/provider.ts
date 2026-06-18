@@ -60,6 +60,31 @@ export interface InkassoCase {
     email?: string | null
   }
   notes?: string | null
+  /** Provider-side user/account on whose behalf the case is filed (e.g. Paywise
+   *  X-User-Id = the gym's Paywise user). Ignored by providers that don't need it. */
+  providerUserId?: string | null
+  /** Rich claim detail some providers need (Paywise: dates + principal/fees split).
+   *  Optional + provider-specific; the manual/sandbox path ignores it. */
+  claim?: {
+    /** invoice number → document_reference */
+    invoiceNumber?: string | null
+    /** human description of the service → subject_matter */
+    subjectMatter?: string | null
+    /** invoice/service date (ISO yyyy-mm-dd) → document_date & occurence_date */
+    issuedAt?: string | null
+    /** payment due date (ISO yyyy-mm-dd) → due_date */
+    dueDate?: string | null
+    /** date of the first *real* Mahnung (NOT a Zahlungserinnerung) → reminder_date */
+    reminderDate?: string | null
+    /** date the debtor entered default per §286 BGB → delay_date */
+    delayDate?: string | null
+    /** principal claim (the unpaid invoice gross) in cents → main_claim_amount */
+    principalCents?: number
+    /** optional extra charges (Mahngebühren/Zinsen) → additional_charges */
+    additionalCharges?: Array<{ label: string; amountCents: number }>
+  }
+  /** Supporting documents (e.g. the invoice/dossier PDF) to attach to the case. */
+  documents?: Array<{ filename: string; mimeType: string; contentBase64: string }>
 }
 
 export interface SubmitResult {
