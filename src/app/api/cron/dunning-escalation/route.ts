@@ -4,7 +4,8 @@ import { cronGuard } from '@/lib/cron-guard'
 import { withCronSentry } from '@/lib/cron/with-sentry'
 import { sendDunningMail } from '@/lib/dunning-mail'
 import { isDueForInkassoHandoff } from '@/lib/dunning/levels'
-import { getApiProvider, buildReference, type InkassoCase } from '@/lib/inkasso'
+import { getApiProvider } from '@/lib/inkasso'
+import { assembleInkassoCase } from '@/lib/inkasso/assemble'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -225,7 +226,7 @@ export const GET = withCronSentry('dunning-escalation', async (req: Request) => 
   if (hasAutoGym) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: level3Members, error: l3hErr } = await (supabase.from('members') as any)
-      .select('id, gym_id, first_name, last_name, email, phone, date_of_birth, address, dunning_amount_cents, dunning_last_action_at')
+      .select('id, gym_id, first_name, last_name, email, phone, date_of_birth, address, dunning_amount_cents, dunning_last_action_at, dunning_started_at')
       .eq('dunning_level', 3)
       .not('dunning_last_action_at', 'is', null)
       .limit(2000)
@@ -242,6 +243,7 @@ export const GET = withCronSentry('dunning-escalation', async (req: Request) => 
       address: string | null
       dunning_amount_cents: number | null
       dunning_last_action_at: string | null
+      dunning_started_at: string | null
     }>) {
       try {
         const cfg = gymConfig.get(m.gym_id) ?? fallbackCfg
@@ -297,23 +299,15 @@ export const GET = withCronSentry('dunning-escalation', async (req: Request) => 
         // Pfad, sobald Keys + Claim-Felder da sind — siehe INKASSO_PAYWISE_MAPPING §10).
         const apiProvider = getApiProvider(provider)
         if (apiProvider) {
-          const inkassoCase: InkassoCase = {
+          const inkassoCase = await assembleInkassoCase(supabase, {
             handoffId: handoff.id,
             gymId: m.gym_id,
-            memberId: m.id,
             amountCents: amount,
-            reference: buildReference(m.gym_id, handoff.id),
-            debtor: {
-              firstName: m.first_name ?? '',
-              lastName: m.last_name ?? '',
-              email: m.email,
-              phone: m.phone,
-              dateOfBirth: m.date_of_birth,
-              street: m.address,
-            },
-            creditor: { gymName: cfg.name ?? 'Studio' },
-            providerUserId: cfg.paywiseUserId,
-          }
+            notes: null,
+            member: m,
+            gymName: cfg.name,
+            paywiseUserId: cfg.paywiseUserId,
+          })
           const submit = await apiProvider.submitCase(inkassoCase).catch((e: unknown) => ({
             ok: false as const, status: 'initiated' as const, raw: { error: String(e) },
             error: e instanceof Error ? e.message : 'submit failed',

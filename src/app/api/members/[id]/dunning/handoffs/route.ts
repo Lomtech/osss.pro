@@ -3,7 +3,8 @@ import { createClient as createAuthClient } from '@supabase/supabase-js'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getCachedUser } from '@/lib/auth/cached-user'
 import { getCachedGymForOwner } from '@/lib/auth/cached-gym'
-import { getApiProvider, buildReference, type InkassoCase } from '@/lib/inkasso'
+import { getApiProvider } from '@/lib/inkasso'
+import { assembleInkassoCase } from '@/lib/inkasso/assemble'
 
 // Bearer-Auth statt Cookie-Auth (CORS-resistent gegen Browser-Extensions).
 function authSupabase(token: string) {
@@ -78,7 +79,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Verify member belongs to gym
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: member } = await (supabase.from('members') as any)
-    .select('id, gym_id, first_name, last_name, email, phone, date_of_birth, address')
+    .select('id, gym_id, first_name, last_name, email, phone, date_of_birth, address, dunning_started_at')
     .eq('id', memberId).maybeSingle()
   if (!member || member.gym_id !== gym.id) {
     return NextResponse.json({ error: 'Mitglied nicht gefunden' }, { status: 404 })
@@ -150,23 +151,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const apiProvider = getApiProvider(provider)
   if (apiProvider) {
-    const inkassoCase: InkassoCase = {
+    const inkassoCase = await assembleInkassoCase(service, {
       handoffId: handoff.id,
       gymId: gym.id,
-      memberId,
       amountCents: amount_cents,
-      reference: buildReference(gym.id, handoff.id),
-      debtor: {
-        firstName: member.first_name ?? '',
-        lastName: member.last_name ?? '',
-        email: member.email,
-        phone: member.phone,
-        dateOfBirth: member.date_of_birth,
-        street: member.address,
-      },
-      creditor: { gymName: gym.name ?? 'Studio' },
       notes,
-    }
+      member,
+      gymName: gym.name ?? null,
+    })
     const submitRes = await apiProvider.submitCase(inkassoCase).catch((e: unknown) => ({
       ok: false as const,
       status: 'initiated' as const,
