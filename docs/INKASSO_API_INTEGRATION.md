@@ -8,6 +8,13 @@ Diese Anleitung führt von dort zu „Inkasso-API läuft in Produktion".
 > seriöse deutsche Anbieter gated seine API dahinter (kein self-serve). Phase 0
 > ist deshalb der kritische Pfad, nicht der Code.
 
+> **Update 2026-06-18 — Provider gewählt: Paywise** (paywise.de). Onboarding als
+> Integrationspartner hat geklappt; §19 ist dort **kein** Blocker (Partner-Modell,
+> Gyms = Gläubiger). Das konkrete Feld-Mapping + der Paywise-Adapterplan stehen in
+> **[`INKASSO_PAYWISE_MAPPING.md`](./INKASSO_PAYWISE_MAPPING.md)**. Dieses Playbook
+> bleibt der generische Rahmen (Phasen 0–7); die Anbieter-Tabelle in Phase 0.1 ist
+> damit historisch.
+
 ---
 
 ## Was schon existiert (nicht nochmal bauen)
