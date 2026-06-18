@@ -10,17 +10,23 @@ type DunningSectionProps = {
   initialLateFeeCents: number | null | undefined
   initialDaysL2: number | null | undefined
   initialDaysL3: number | null | undefined
+  initialAutoInkasso: boolean | null | undefined
+  initialDaysToInkasso: number | null | undefined
 }
 
 export function DunningSection({
   initialLateFeeCents,
   initialDaysL2,
   initialDaysL3,
+  initialAutoInkasso,
+  initialDaysToInkasso,
 }: DunningSectionProps) {
   const { t } = useLanguage()
   const [lateFee, setLateFee] = useState('10.00')
   const [daysL2, setDaysL2] = useState(14)
   const [daysL3, setDaysL3] = useState(28)
+  const [autoInkasso, setAutoInkasso] = useState(false)
+  const [daysToInkasso, setDaysToInkasso] = useState(14)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -30,7 +36,9 @@ export function DunningSection({
     setLateFee(typeof initialLateFeeCents === 'number' ? (initialLateFeeCents / 100).toFixed(2) : '10.00')
     setDaysL2(typeof initialDaysL2 === 'number' ? initialDaysL2 : 14)
     setDaysL3(typeof initialDaysL3 === 'number' ? initialDaysL3 : 28)
-  }, [initialLateFeeCents, initialDaysL2, initialDaysL3])
+    setAutoInkasso(initialAutoInkasso === true)
+    setDaysToInkasso(typeof initialDaysToInkasso === 'number' ? initialDaysToInkasso : 14)
+  }, [initialLateFeeCents, initialDaysL2, initialDaysL3, initialAutoInkasso, initialDaysToInkasso])
 
   async function handleSave() {
     setError(null)
@@ -51,6 +59,10 @@ export function DunningSection({
       setError('Inkasso-Drohung muss nach 2. Mahnung erfolgen.')
       return
     }
+    if (autoInkasso && (!Number.isInteger(daysToInkasso) || daysToInkasso < 1 || daysToInkasso > 180)) {
+      setError('Tage bis Auto-Übergabe müssen zwischen 1 und 180 liegen.')
+      return
+    }
     setSaving(true)
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
@@ -67,6 +79,8 @@ export function DunningSection({
         dunning_late_fee_cents: lateFeeCents,
         dunning_days_to_level_2: daysL2,
         dunning_days_to_level_3: daysL3,
+        dunning_auto_inkasso_enabled: autoInkasso,
+        dunning_days_to_inkasso: daysToInkasso,
       }),
     })
     setSaving(false)
@@ -137,6 +151,42 @@ export function DunningSection({
               Frist seit Mahn-Beginn (Default 28).
             </p>
           </div>
+        </div>
+        <div className="border-t border-zinc-100 pt-4">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoInkasso}
+              onChange={e => setAutoInkasso(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-amber-500 focus:ring-amber-400"
+            />
+            <span className="text-sm">
+              <span className="font-medium text-zinc-700">Automatisch ans Inkasso übergeben</span>
+              <span className="block text-xs text-zinc-400 mt-0.5">
+                Nach der letzten Mahnung (Stufe 3) wird die offene Forderung automatisch
+                an den Inkasso-Anbieter übergeben — ohne manuellen Klick.
+              </span>
+            </span>
+          </label>
+          {autoInkasso && (
+            <div className="mt-3 pl-[26px]">
+              <label className="block text-xs font-medium text-zinc-600 mb-1.5">
+                Tage nach letzter Mahnung bis Übergabe
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={180}
+                value={daysToInkasso}
+                onChange={e => setDaysToInkasso(parseInt(e.target.value, 10) || 0)}
+                className={inputCls}
+              />
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                Übergabe erfolgt nur, wenn ein Inkasso-Anbieter verbunden ist. Stelle sicher,
+                dass die Beauftragung rechtlich gedeckt ist (AVV/AGB).
+              </p>
+            </div>
+          )}
         </div>
         {error && (
           <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">

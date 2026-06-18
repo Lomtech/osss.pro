@@ -181,6 +181,9 @@ export interface Database {
           dunning_late_fee_cents: number
           dunning_days_to_level_2: number
           dunning_days_to_level_3: number
+          // Auto-Inkasso-Übergabe (Migration 0019) — opt-in pro Gym
+          dunning_auto_inkasso_enabled: boolean
+          dunning_days_to_inkasso: number
           // Paywise-Inkasso (Migration 0018) — Company/User des Gyms bei Paywise
           paywise_company_id: string | null
           paywise_user_id: string | null

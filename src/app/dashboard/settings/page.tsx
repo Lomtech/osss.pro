@@ -91,6 +91,8 @@ function SettingsPageInner() {
   const [initialDunningLateFeeCents, setInitialDunningLateFeeCents] = useState<number | null | undefined>(undefined)
   const [initialDunningDaysL2, setInitialDunningDaysL2] = useState<number | null | undefined>(undefined)
   const [initialDunningDaysL3, setInitialDunningDaysL3] = useState<number | null | undefined>(undefined)
+  const [initialDunningAutoInkasso, setInitialDunningAutoInkasso] = useState<boolean | null | undefined>(undefined)
+  const [initialDunningDaysToInkasso, setInitialDunningDaysToInkasso] = useState<number | null | undefined>(undefined)
   const [initialGpsLat, setInitialGpsLat]   = useState<number | null>(null)
   const [initialGpsLng, setInitialGpsLng]   = useState<number | null>(null)
   const [initialGpsRadius, setInitialGpsRadius] = useState<number | null | undefined>(undefined)
@@ -296,6 +298,10 @@ function SettingsPageInner() {
         setInitialDunningDaysL2(daysL2 ?? null)
         const daysL3 = (data as { dunning_days_to_level_3?: number | null }).dunning_days_to_level_3
         setInitialDunningDaysL3(daysL3 ?? null)
+        const autoInk = (data as { dunning_auto_inkasso_enabled?: boolean | null }).dunning_auto_inkasso_enabled
+        setInitialDunningAutoInkasso(autoInk ?? null)
+        const daysInk = (data as { dunning_days_to_inkasso?: number | null }).dunning_days_to_inkasso
+        setInitialDunningDaysToInkasso(daysInk ?? null)
         const rawClassTypes = data.class_types
         if (Array.isArray(rawClassTypes)) setClassTypesInput(rawClassTypes.join(', '))
         const savedSport = data.sport_type as SportType | undefined
@@ -1071,6 +1077,8 @@ function SettingsPageInner() {
             initialLateFeeCents={initialDunningLateFeeCents}
             initialDaysL2={initialDunningDaysL2}
             initialDaysL3={initialDunningDaysL3}
+            initialAutoInkasso={initialDunningAutoInkasso}
+            initialDaysToInkasso={initialDunningDaysToInkasso}
           />
 
           <LegalSection

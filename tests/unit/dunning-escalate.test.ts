@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect } from 'vitest'
-import { nextDunningLevel, dunningActionType } from '@/lib/dunning/levels'
+import { nextDunningLevel, dunningActionType, isDueForInkassoHandoff } from '@/lib/dunning/levels'
 
 describe('nextDunningLevel', () => {
   test('bumps by one, capped at 3', () => {
@@ -28,5 +28,47 @@ describe('dunningActionType', () => {
   })
   test('already at level 3 → note (no further escalation, just logged)', () => {
     expect(dunningActionType(3, 3)).toBe('note')
+  })
+})
+
+describe('isDueForInkassoHandoff', () => {
+  const NOW = Date.UTC(2026, 5, 18) // fixed clock; pass nowMs explicitly (no Date.now())
+  const day = 86_400_000
+  const base = {
+    enabled: true,
+    dunningLevel: 3,
+    amountCents: 5900,
+    daysToInkasso: 14,
+    nowMs: NOW,
+  }
+
+  test('due when L3, enabled, unpaid, and last action older than the window', () => {
+    const lastAction = new Date(NOW - 15 * day).toISOString()
+    expect(isDueForInkassoHandoff({ ...base, lastActionAt: lastAction })).toBe(true)
+  })
+
+  test('not due while still inside the window', () => {
+    const lastAction = new Date(NOW - 13 * day).toISOString()
+    expect(isDueForInkassoHandoff({ ...base, lastActionAt: lastAction })).toBe(false)
+  })
+
+  test('opt-out (disabled) is never due', () => {
+    const lastAction = new Date(NOW - 60 * day).toISOString()
+    expect(isDueForInkassoHandoff({ ...base, enabled: false, lastActionAt: lastAction })).toBe(false)
+  })
+
+  test('below level 3 is never due', () => {
+    const lastAction = new Date(NOW - 60 * day).toISOString()
+    expect(isDueForInkassoHandoff({ ...base, dunningLevel: 2, lastActionAt: lastAction })).toBe(false)
+  })
+
+  test('zero / missing arrears is never due', () => {
+    const lastAction = new Date(NOW - 60 * day).toISOString()
+    expect(isDueForInkassoHandoff({ ...base, amountCents: 0, lastActionAt: lastAction })).toBe(false)
+    expect(isDueForInkassoHandoff({ ...base, amountCents: null, lastActionAt: lastAction })).toBe(false)
+  })
+
+  test('missing last action → not due (defensive)', () => {
+    expect(isDueForInkassoHandoff({ ...base, lastActionAt: null })).toBe(false)
   })
 })

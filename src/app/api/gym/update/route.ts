@@ -48,6 +48,7 @@ const ALLOWED_FIELDS = new Set<string>([
   'invoice_prefix', 'bank_bic', 'bank_name',
   // Dunning-Config
   'dunning_late_fee_cents', 'dunning_days_to_level_2', 'dunning_days_to_level_3',
+  'dunning_auto_inkasso_enabled', 'dunning_days_to_inkasso',
   // Misc
   'whatsapp_group_url', 'callmebot_api_key',
 ])
