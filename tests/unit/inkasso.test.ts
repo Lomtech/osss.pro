@@ -256,3 +256,25 @@ describe('PaywiseProvider — webhook verify + parse', () => {
     expect(pw.parseWebhook({ event: null })).toBeNull()
   })
 })
+
+describe('PaywiseProvider — reportPayment', () => {
+  test('POSTs to /v1/payments/ with claim + decimal-euro amount + X-User-Id', async () => {
+    const calls: Array<{ url: string; method?: string; headers?: Record<string, string>; body?: string }> = []
+    global.fetch = vi.fn(async (url: unknown, init?: { method?: string; headers?: Record<string, string>; body?: unknown }) => {
+      calls.push({ url: String(url), method: init?.method, headers: init?.headers, body: typeof init?.body === 'string' ? init.body : undefined })
+      return mkRes(true, 201, { id: 'pay_1' })
+    }) as unknown as typeof fetch
+
+    const pw2 = new PaywiseProvider({ apiToken: 'tok' })
+    const r = await pw2.reportPayment({ claimId: 'clm_1', amountCents: 5900, valueDate: '2026-06-18', userId: 'user_gym_1' })
+
+    expect(r.ok).toBe(true)
+    expect(calls[0].url).toBe('https://api.paywise.de/v1/payments/')
+    expect(calls[0].method).toBe('POST')
+    expect(calls[0].headers?.['X-User-Id']).toBe('user_gym_1')
+    const body = JSON.parse(calls[0].body!)
+    expect(body.claim).toBe('clm_1')
+    expect(body.amount).toEqual({ value: '59.00' })
+    expect(body.value_date).toBe('2026-06-18')
+  })
+})

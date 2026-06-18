@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { sendMemberPaymentFailedEmail } from '@/lib/notify'
 import { escalateDunning } from '@/lib/dunning/escalate'
+import { reportInkassoPaymentIfHandedOver } from '@/lib/inkasso/report-payment'
 import { PRICING_TIERS, type PlanKey } from '@/lib/pricing'
 import {
   isStripeEventProcessed,
@@ -456,6 +457,12 @@ export async function POST(req: Request) {
         stripe_invoice_id:        invoiceId ?? null,
       } as any)
       if (insErr) throw insErr
+
+      // Falls der Fall bereits ans Inkasso übergeben wurde: Zahlung an Paywise
+      // melden, damit nicht zu viel eingezogen wird (no-op ohne offenen Handoff).
+      await reportInkassoPaymentIfHandedOver(supabase, {
+        memberId, amountCents, valueDate: new Date().toISOString().slice(0, 10),
+      })
     }
   }
 
@@ -469,6 +476,21 @@ export async function POST(req: Request) {
       .eq('stripe_payment_intent_id', pi.id)
       .eq('status', 'pending')
     if (sepaErr) throw sepaErr
+
+    // Direktzahlungs-Meldung ans Inkasso (no-op ohne offenen Paywise-Handoff).
+    // member_id + Betrag aus der gerade bezahlten payments-Row auflösen.
+    const { data: paidRow } = await supabase
+      .from('payments')
+      .select('member_id, amount_cents')
+      .eq('stripe_payment_intent_id', pi.id)
+      .maybeSingle()
+    if (paidRow?.member_id) {
+      await reportInkassoPaymentIfHandedOver(supabase, {
+        memberId: paidRow.member_id,
+        amountCents: paidRow.amount_cents ?? 0,
+        valueDate: now.slice(0, 10),
+      })
+    }
   }
 
   // ── invoice.payment_failed ───────────────────────────────────────────────────

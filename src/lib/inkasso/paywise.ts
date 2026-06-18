@@ -212,6 +212,32 @@ export class PaywiseProvider implements InkassoProvider {
     }
   }
 
+  /** Eine vom Schuldner direkt ans Gym gezahlte (Teil-)Zahlung an Paywise melden,
+   *  damit nicht zu viel eingezogen wird. POST /v1/payments/. */
+  async reportPayment(input: {
+    /** Paywise-Claim-ID (= dunning_handoffs.reference_id) */
+    claimId: string
+    amountCents: number
+    /** Wertstellungsdatum yyyy-mm-dd */
+    valueDate: string
+    /** X-User-Id (paywise_user_id des Gyms) */
+    userId?: string | null
+    reference?: string | null
+  }): Promise<{ ok: boolean; raw: unknown; error?: string }> {
+    try {
+      const res = await this.cm('/payments/', 'POST', {
+        claim: input.claimId,
+        amount: { value: euro(input.amountCents) },
+        value_date: input.valueDate,
+        your_reference: input.reference ?? undefined,
+      }, input.userId)
+      if (!res.ok) return { ok: false, raw: res.json, error: `HTTP ${res.status}` }
+      return { ok: true, raw: res.json }
+    } catch (e) {
+      return { ok: false, raw: { error: String(e) }, error: e instanceof Error ? e.message : 'network error' }
+    }
+  }
+
   // ── Webhook (HMAC-SHA256, Header X-Paywise-Signature: sha256=<hex>) ──────────
 
   verifyWebhook(rawBody: string, headers: Record<string, string>): boolean {

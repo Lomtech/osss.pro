@@ -224,17 +224,18 @@ INKASSO_PAYWISE_BASE_URL=https://api.paywise.de
 
 ## 10. Bau-Reihenfolge / Stand
 
-✅ = in diesem Increment gebaut + verifiziert (tsc 0, vitest 19/19, osss-audit 0).
+✅ = gebaut + verifiziert (tsc 0, vitest 38/38, osss-audit 0). Stand 2026-06-18.
 
-1. ✅ **Migration** `supabase/migrations/0018_paywise_inkasso.sql` — `gyms.paywise_*`-Spalten + `'paywise'` im `provider`-CHECK. *(Datei da; auf Live-DB noch anzuwenden.)*
-2. ✅ **`PaywiseProvider`-Adapter** (`src/lib/inkasso/paywise.ts`) — `submitCase` (4-Step) + Betrags-Split + `verifyWebhook` (HMAC) + `parseWebhook` + `onboardCompany` (API-only). Registriert in `index.ts`, Env in `.env.example`, Provider-Slot `'paywise'`.
-3. ✅ **Tests** — `tests/unit/inkasso.test.ts` (9 Paywise-Tests: submitCase-Sequenz/Betrags-Split/Pflichtfeld-Guard, HMAC-verify, parseWebhook-Mapping).
-4. ⬜ **Onboarding-Wiring** — Dashboard-Opt-in („Inkasso aktivieren", schreibt `paywise_consent_at`) → ruft `onboardCompany()` → speichert `company_id`/`user_id` auf dem Gym.
-5. ⬜ **Handoff-Route anreichern** — `InkassoCase.claim` + `providerUserId` + `documents` aus `payments`/`members`/Mahn-Daten füllen (Datums-Defaults s. u.) + Adress-Strukturierung.
-6. ⬜ **Webhook-Endpoint registrieren** (`/api/inkasso/webhook/paywise`) + Secret setzen; optional Reconciliation-Poll-Cron als Backstop.
-7. ⬜ **Direktzahlungs-Meldung** (§6) im Stripe-/Manuell-Zahlungs-Pfad.
-8. ⬜ **DSGVO** — AVV mit Paywise + Verarbeitungsverzeichnis „V11 — Forderungsbeitreibung" + Datenschutzerklärung (Playbook Phase 0.3).
-9. ⬜ **Voraussetzungen + Go-live** — `API_ONLY_ONBOARDING`-Permission + Test-Keys von Paywise → Test-Mode-Durchlauf → erster Echtfall.
+1. ✅ **Migrationen** `0018_paywise_inkasso.sql` + `0019_auto_inkasso_handover.sql` — `gyms.paywise_*` + `dunning_auto_inkasso_*` + `'paywise'` im `provider`-CHECK. **Live angewandt** (additiv, verifiziert).
+2. ✅ **`PaywiseProvider`-Adapter** (`src/lib/inkasso/paywise.ts`) — `submitCase` (4-Step) + Betrags-Split + `verifyWebhook` (HMAC) + `parseWebhook` + `onboardCompany` (API-only). Registriert, Env, Provider-Slot `'paywise'`.
+3. ✅ **Auto-Übergabe an Stufe 3** (Cron `dunning-escalation`) — opt-in pro Gym (`dunning_auto_inkasso_enabled`), idempotent; Settings-Toggle. `isDueForInkassoHandoff` getestet.
+4. ✅ **Handoff-Anreicherung** (`assemble.ts` + `address.ts` + `claim-fields.ts`) — vollständige Claims (Pflichtfelder + strukturierte Adresse via Parser + `providerUserId`), gemeinsam von Route + Cron. Getestet.
+5. ✅ **Onboarding-Wiring** — `POST /api/inkasso/onboard` (idempotent, owner-authed) ruft `onboardCompany()`, speichert `company_id`/`user_id`/`paywise_consent_at`; Settings-Sektion „Mit Paywise verbinden".
+6. ⬜ **Direktzahlungs-Meldung** (§6) — `reportPayment` im Adapter + Hook im Stripe-/Manuell-Zahlungs-Pfad (Member mit offenem Handoff → `POST /v1/payments/`). **Korrektheits-kritisch** (sonst zieht Paywise bereits Gezahltes ein). Braucht das exakte create-payment-Schema. NICHT gebaut.
+7. ⬜ **Webhook-Endpoint registrieren** (`/api/inkasso/webhook/paywise`) + Secret — Account-Aktion (manage-endpoints-API/Dashboard). Receiver + `verifyWebhook` stehen.
+8. ⬜ **Optionale Verbesserungen** — Rechnungs-PDF als Doc anhängen (Paywise: optional/empfohlen); Multi-Invoice-Positionen statt Aggregat-Claim; Reconciliation-Poll-Backstop.
+9. ⬜ **DSGVO** — AVV mit Paywise + Verarbeitungsverzeichnis „V11 — Forderungsbeitreibung" + Datenschutzerklärung.
+10. ⬜ **Voraussetzungen + Go-live (nur durch User)** — `API_ONLY_ONBOARDING`-Permission anfragen + Test-/Prod-Keys (Partner+Case-Mgmt) in Env → Test-Mode-Durchlauf → erster Echtfall.
 
 **Gewählte §9-Defaults (automatisierungsfreundlich, im Adapter umgesetzt/erwartet):**
 `occurence_date`=`document_date`=`issued_at` · `due_date`=`payments.due_date` · `delay_date`=`due_date`+30 T (§286 Abs. 3 BGB) · `reminder_date`=Datum der ersten echten Mahnung · Betrag=Hauptforderung (Prinzipal); Verzugskosten überlässt v1 dem Inkasso (kein double-charging) · `{value}`=Dezimal-Euro mit Punkt.
