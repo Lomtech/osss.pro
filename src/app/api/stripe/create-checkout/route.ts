@@ -90,11 +90,13 @@ export async function POST(req: Request) {
       metadata: { memberId, gymId },
     }
 
-    if (connectedAccountId) {
-      const fee = platformFeeCents(amountCents, platformFeePercent)
-      sessionParams.payment_intent_data = {
-        ...(fee > 0 ? { application_fee_amount: fee } : {}),
-      }
+    // memberId/gymId auch auf den PaymentIntent — damit
+    // payment_intent.payment_failed (Mahn-Flow) den Member zuverlässig auflösen
+    // kann, nicht nur die Checkout-Session.
+    const fee = connectedAccountId ? platformFeeCents(amountCents, platformFeePercent) : 0
+    sessionParams.payment_intent_data = {
+      metadata: { memberId, gymId },
+      ...(fee > 0 ? { application_fee_amount: fee } : {}),
     }
 
     // Direct charge: session on connected account so customer is found

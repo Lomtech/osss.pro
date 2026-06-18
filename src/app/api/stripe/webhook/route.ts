@@ -3,7 +3,7 @@ import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { sendMemberPaymentFailedEmail } from '@/lib/notify'
-import { sendDunningMail } from '@/lib/dunning-mail'
+import { escalateDunning } from '@/lib/dunning/escalate'
 import { PRICING_TIERS, type PlanKey } from '@/lib/pricing'
 import {
   isStripeEventProcessed,
@@ -303,6 +303,20 @@ export async function POST(req: Request) {
     const pi = event.data.object as Stripe.PaymentIntent
     const { error: failErr } = await supabase.from('payments').update({ status: 'failed' }).eq('stripe_payment_intent_id', pi.id)
     if (failErr) throw failErr
+
+    // Mahn-Flow auch für Einmal-/SEPA-Zahlungen — bisher eskalierten NUR
+    // Abo-Rechnungen (invoice.payment_failed), Einmal-Fehler rutschten durch
+    // → Rückstände häuften sich unbemerkt an. memberId via PI-Metadata, sonst
+    // via payments-Row. Kein Member-Link → nur Status, kein Mahn-Trigger.
+    let pfMemberId = typeof pi.metadata?.memberId === 'string' ? pi.metadata.memberId : null
+    if (!pfMemberId) {
+      const { data: payRow } = await supabase.from('payments')
+        .select('member_id').eq('stripe_payment_intent_id', pi.id).maybeSingle()
+      pfMemberId = (payRow as { member_id?: string | null } | null)?.member_id ?? null
+    }
+    if (pfMemberId) {
+      await escalateDunning(supabase, pfMemberId, pi.amount ?? 0, `Einmal-Zahlung fehlgeschlagen (PI ${pi.id})`)
+    }
   }
 
   // ── customer.subscription.created / updated ──────────────────────────────────
@@ -493,64 +507,10 @@ export async function POST(req: Request) {
         console.error('[webhook] dunning notification failed:', notifyErr)
       }
 
-      // Auto-Mahnung (dunning escalation): increment dunning_level, log dunning_actions row,
-      // optionally send dunning mail. Wrapped in try/catch — DB failures here MUST NOT cause
-      // Stripe to retry (event-dedup on stripe_events handles that idempotently).
-      try {
-        const { data: dunningRow } = await supabase.from('members')
-          .select('dunning_level, dunning_amount_cents, dunning_started_at, gym_id')
-          .eq('id', memberId).maybeSingle()
-
-        const currentLevel = (dunningRow as { dunning_level?: number | null } | null)?.dunning_level ?? 0
-        const newLevel = Math.min(currentLevel + 1, 3)
-        const actionType: 'first_reminder' | 'second_reminder' | 'final_warning' | 'note' =
-          newLevel === 1 ? 'first_reminder'
-          : newLevel === 2 ? 'second_reminder'
-          : newLevel === 3 ? (currentLevel === 3 ? 'note' : 'final_warning')
-          : 'note'
-
-        const failedAmountCents = inv.amount_due ?? inv.total ?? 0
-        const prevAmount = (dunningRow as { dunning_amount_cents?: number | null } | null)?.dunning_amount_cents ?? 0
-        const newAmountCents = prevAmount + failedAmountCents
-        const dGymId = (dunningRow as { gym_id?: string | null } | null)?.gym_id ?? null
-
-        const { error: insertActionErr } = await supabase.from('dunning_actions').insert({
-          member_id: memberId,
-          gym_id: dGymId,
-          action_type: actionType,
-          amount_cents: failedAmountCents,
-          notes: `Auto-Trigger: Stripe-Zahlung fehlgeschlagen (Invoice ${inv.id ?? '?'})`,
-          performed_by: null,
-        } as never)
-        if (insertActionErr) {
-          console.error('[webhook] dunning_actions insert failed:', insertActionErr)
-        }
-
-        const updates: Record<string, unknown> = {
-          dunning_level: newLevel,
-          dunning_amount_cents: newAmountCents,
-          dunning_last_action_at: new Date().toISOString(),
-        }
-        if (!(dunningRow as { dunning_started_at?: string | null } | null)?.dunning_started_at) {
-          updates.dunning_started_at = new Date().toISOString()
-        }
-        const { error: dunningUpdErr } = await supabase.from('members')
-          .update(updates as never)
-          .eq('id', memberId)
-        if (dunningUpdErr) {
-          console.error('[webhook] members dunning update failed:', dunningUpdErr)
-        }
-
-        // Optional dunning mail to member. Audit 2026-05-11: dynamic import war
-        // defensiv für einen Zeitraum in dem das Helper-Modul evtl. nicht
-        // existierte. Modul existiert stabil seit längerem → static import.
-        await sendDunningMail(memberId, newLevel, failedAmountCents).catch((err: unknown) => {
-          console.error('[webhook] dunning mail failed (non-critical):', err)
-        })
-      } catch (dunningErr) {
-        // Swallow: webhook still returns 200; Stripe event-dedup prevents replays.
-        console.error('[webhook] dunning escalation failed (non-critical):', dunningErr)
-      }
+      // Auto-Mahnung via gemeinsamem Helper (auch von payment_intent.payment_failed
+      // genutzt, damit Abo- UND Einmal-Zahlungen denselben Mahn-Flow auslösen).
+      const failedAmountCents = inv.amount_due ?? inv.total ?? 0
+      await escalateDunning(supabase, memberId, failedAmountCents, `Stripe-Zahlung fehlgeschlagen (Invoice ${inv.id ?? '?'})`)
     } else if (meta.type === 'owner_plan') {
       const gymId = meta.gymId
       if (gymId) {
