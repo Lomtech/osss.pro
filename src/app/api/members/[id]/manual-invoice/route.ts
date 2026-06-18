@@ -61,6 +61,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Mitglied nicht gefunden' }, { status: 404 })
   }
 
+  // § 19 UStG: Kleinunternehmer dürfen keine USt ausweisen. resolveOwnerGym
+  // liefert das Flag nicht mit → separat holen, um tax_rate_pct zu erzwingen.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: gymTax } = await (supabase.from('gyms') as any)
+    .select('is_kleinunternehmer').eq('id', gym.id).maybeSingle()
+  const isKleinunternehmer = gymTax?.is_kleinunternehmer === true
+
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const due_date = typeof body.due_date === 'string' ? body.due_date.slice(0, 10) : null
   const paid = body.paid === true
@@ -93,6 +100,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (items.length === 0) {
     return NextResponse.json({ error: 'Keine Positionen' }, { status: 400 })
+  }
+
+  // § 19 UStG: bei Kleinunternehmer wird auf JEDER Position 0 % erzwungen —
+  // egal was reinkam. So bleibt DB-Spur + PDF konsistent (keine 19 %-Speicherung
+  // trotz § 19-Hinweis). Der Hinweis selbst wird im PDF gerendert.
+  if (isKleinunternehmer) {
+    items = items.map((i) => ({ ...i, tax_rate_pct: 0 }))
   }
 
   // Aggregate totals (brutto = sum of items, tax extracted)

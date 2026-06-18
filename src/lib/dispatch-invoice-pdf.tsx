@@ -171,7 +171,7 @@ function InvoicePdf({ payment, items, totals }: InvoicePdfProps) {
               <Text style={styles.colDesc}>{item.description}</Text>
               <Text style={styles.colQty}>{item.qty.toLocaleString('de-DE')}</Text>
               <Text style={styles.colPrice}>{fmtEur(item.unit_price_cents)}</Text>
-              <Text style={styles.colTax}>{item.tax_rate_pct}%</Text>
+              <Text style={styles.colTax}>{isKleinUnt ? '—' : `${item.tax_rate_pct}%`}</Text>
               <Text style={styles.colTotal}>{fmtEur(item.line_net_cents)}</Text>
             </View>
           )) : (

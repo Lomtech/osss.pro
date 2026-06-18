@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmModal";
 import { PromptProvider } from "@/components/PromptModal";
 import { TrackPageView, TrackClicks } from "@/components/TrackPageView";
+import { STANDARD_TIER } from "@/lib/pricing";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -136,11 +137,12 @@ const structuredData = {
         "Die deutsche Gym-Software für Kampfsport. Mit Belt-System, DATEV-Export, SEPA und DSGVO-Compliance.",
       url: "https://www.osss.pro",
       inLanguage: ["de", "en"],
+      // Single-Tier seit 2026-05 — aus pricing.ts abgeleitet, damit die
+      // strukturierten Daten (Google Rich-Snippet) nicht von der echten
+      // Preisseite driften.
       offers: [
-        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "EUR" },
-        { "@type": "Offer", name: "Starter", price: "29", priceCurrency: "EUR" },
-        { "@type": "Offer", name: "Grow", price: "59", priceCurrency: "EUR" },
-        { "@type": "Offer", name: "Pro", price: "99", priceCurrency: "EUR" },
+        { "@type": "Offer", name: `${STANDARD_TIER.name} (monatlich)`, price: String(STANDARD_TIER.monthlyCents / 100), priceCurrency: "EUR" },
+        { "@type": "Offer", name: `${STANDARD_TIER.name} (jährlich)`, price: String(STANDARD_TIER.annualMonthlyCents / 100), priceCurrency: "EUR" },
       ],
       featureList: [
         "Mitgliederverwaltung",

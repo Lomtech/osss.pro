@@ -24,6 +24,12 @@ pub fn run(root: &Path) -> Result<Vec<Finding>> {
     let lifetime_re = Regex::new(r"(?i)LIFETIME[_-]?PILOT")?;
     // Hardcoded EUR amounts: "49 €" | "49€" | "49 EUR" | "49,00 €" (with decimal/cents we don't need here)
     let price_re = Regex::new(r"(?P<amount>\d{1,3})\s?(?:€|EUR\b)")?;
+    // JSON-LD / Schema.org Offer.price — a *quoted, all-digit* price field. It
+    // carries NO € symbol (`price: "29"`), so price_re above misses it entirely.
+    // This was the layout.tsx blind spot: stale 4-tier prices sat in the
+    // structured data Google reads for Rich-Snippets while the audit stayed green.
+    // Matches both JS-object (`price: "29"`) and JSON (`"price": "29"`) form.
+    let price_field_re = Regex::new(r#"(?i)"?price"?\s*:\s*["'](\d{1,4})["']"#)?;
 
     let scan_files = list_scan_targets(root);
 
@@ -100,6 +106,33 @@ pub fn run(root: &Path) -> Result<Vec<Finding>> {
                 ),
             ));
         }
+
+        // JSON-LD / Schema.org structured-data prices — quoted, no € sign. Any
+        // value that isn't a current canonical price (monthly/annual/free) is a
+        // public-facing wrong price (Google Rich-Snippet) and must be flagged.
+        for cap in price_field_re.captures_iter(&content) {
+            let m = cap.get(0).unwrap();
+            let amount: u32 = match cap.get(1).and_then(|g| g.as_str().parse().ok()) {
+                Some(n) => n,
+                None => continue,
+            };
+            let Some(sev) =
+                classify_jsonld_price(amount, monthly_eur, annual_eur, is_vs_maat, &stale_4tier)
+            else {
+                continue;
+            };
+            let line = line_of(&content, m.start());
+            let ctx = snippet(&content, m.start(), 40, 50);
+            findings.push(Finding::new(
+                sev,
+                format!("Structured-data price \"{}\" ≠ canonical (Schema.org/JSON-LD)", amount),
+                format!("{}:{} — context: {}", rel_path, line, ctx),
+                format!(
+                    "Quoted price field drifts from STANDARD_TIER ({} € monthly / {} € annual). Derive it from src/lib/pricing.ts (e.g. String(STANDARD_TIER.monthlyCents/100)) so Google Rich-Snippets can't go stale.",
+                    monthly_eur, annual_eur
+                ),
+            ));
+        }
     }
 
     Ok(findings)
@@ -149,6 +182,32 @@ fn classify_stale_price(
     } else {
         Severity::Medium
     })
+}
+
+/// Pure decision for one quoted JSON-LD / Schema.org `price:` field. Structured
+/// data must equal a canonical tier — Google reads it for Rich-Snippets, so any
+/// drift is a publicly-wrong price. Returns the severity, or None when the value
+/// is canonical (monthly, annual, or 0 for a free mention).
+fn classify_jsonld_price(
+    amount: u32,
+    monthly_eur: u32,
+    annual_eur: u32,
+    is_vs_maat: bool,
+    stale_4tier: &BTreeSet<u32>,
+) -> Option<Severity> {
+    if amount == monthly_eur || amount == annual_eur || amount == 0 {
+        return None;
+    }
+    if is_vs_maat {
+        return Some(Severity::Low);
+    }
+    // a *known* old tier value in structured data is the worst case → High;
+    // any other non-canonical value is still drift (typo, forgotten update) → Medium
+    if stale_4tier.contains(&amount) {
+        Some(Severity::High)
+    } else {
+        Some(Severity::Medium)
+    }
 }
 
 fn extract_canonical(src: &str) -> Result<(u32, u32)> {
@@ -261,6 +320,34 @@ mod tests {
             classify_stale_price(89, Some(' '), "kostet 89 € im Jahr", false, &tiers()),
             Some(Severity::Medium)
         );
+    }
+
+    // --- JSON-LD / Schema.org Offer.price (the layout.tsx blind spot) ---
+
+    #[test]
+    fn jsonld_canonical_prices_pass() {
+        // 49 monthly, 39 annual, 0 free — all correct, never flagged
+        assert_eq!(classify_jsonld_price(49, 49, 39, false, &tiers()), None);
+        assert_eq!(classify_jsonld_price(39, 49, 39, false, &tiers()), None);
+        assert_eq!(classify_jsonld_price(0, 49, 39, false, &tiers()), None);
+    }
+
+    #[test]
+    fn jsonld_stale_tier_is_high() {
+        // the exact old layout.tsx values: 29 / 99 in structured data
+        assert_eq!(classify_jsonld_price(29, 49, 39, false, &tiers()), Some(Severity::High));
+        assert_eq!(classify_jsonld_price(99, 49, 39, false, &tiers()), Some(Severity::High));
+    }
+
+    #[test]
+    fn jsonld_noncanonical_nonstale_is_medium() {
+        // 59 was a JSON-LD tier but isn't in the EUR stale set → still drift, Medium
+        assert_eq!(classify_jsonld_price(59, 49, 39, false, &tiers()), Some(Severity::Medium));
+    }
+
+    #[test]
+    fn jsonld_vs_maat_downgraded_to_low() {
+        assert_eq!(classify_jsonld_price(99, 49, 39, true, &tiers()), Some(Severity::Low));
     }
 
     #[test]

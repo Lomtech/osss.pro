@@ -52,6 +52,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Angebot ohne Positionen kann nicht konvertiert werden' }, { status: 400 })
   }
 
+  // § 19 UStG: Kleinunternehmer → keine USt. Flag separat holen (CachedGym hat es
+  // nicht). Bei § 19 wird der Betrag auf die NETTO-Summe gesetzt (das Angebot-Brutto
+  // enthielt ggf. USt) und alle Positions-Steuersätze auf 0 erzwungen.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: gymTax } = await (supabase.from('gyms') as any)
+    .select('is_kleinunternehmer').eq('id', gym.id).maybeSingle()
+  const isKleinunternehmer = gymTax?.is_kleinunternehmer === true
+  const netTotal = (quoteItems as Array<{ qty: number; unit_price_cents: number }>)
+    .reduce((s, qi) => s + Math.round(qi.qty * qi.unit_price_cents), 0)
+  const invoiceAmountCents = isKleinunternehmer ? netTotal : quote.total_gross_cents
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: counter } = await (supabase.rpc as any)('increment_invoice_counter', { p_gym_id: gym.id })
   const invoiceNumber = formatInvoiceNumber(new Date().getFullYear(), counter)
@@ -63,7 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: payment, error: pErr } = await (supabase.from('payments') as any).insert({
     gym_id: gym.id,
     member_id: quote.member_id,
-    amount_cents: quote.total_gross_cents,
+    amount_cents: invoiceAmountCents,
     status: 'pending',
     kind: 'one_off',
     description: `Konvertiert aus Angebot ${quote.quote_number}`,
@@ -71,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     invoice_number: invoiceNumber,
     member_name: quote.recipient_name,
     issued_at: nowIso,
-    tax_rate_pct: quoteItems.length === 1 ? quoteItems[0].tax_rate_pct : 0,
+    tax_rate_pct: isKleinunternehmer ? 0 : (quoteItems.length === 1 ? quoteItems[0].tax_rate_pct : 0),
   }).select().single()
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 })
 
@@ -81,7 +92,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     description: qi.description,
     qty: qi.qty,
     unit_price_cents: qi.unit_price_cents,
-    tax_rate_pct: qi.tax_rate_pct,
+    tax_rate_pct: isKleinunternehmer ? 0 : qi.tax_rate_pct,
   }))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from('invoice_line_items') as any).insert(lineRows)
