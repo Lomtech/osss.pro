@@ -231,6 +231,47 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
         </div>
       </Reveal>
 
+      {/* ── PROMO-VIDEO — 64s Werbespot. Bewusst HIER zwischen Pain-Points (oben)
+           und MAAT-Vergleich (unten): der Clip ist der „Lösungs-Reveal" zwischen
+           Problem und Wettbewerbsbeweis. Das Poster ist die Eröffnungsszene
+           („Mitglieder in Excel.") → knüpft visuell an die Pain-Points an.
+           preload="metadata" → die 7 MB laden erst beim Klick, kein First-Paint-
+           Hit. Narrierter Spot → KEIN Autoplay; native controls = Klick-zum-
+           Abspielen mit Ton. RSC, kein JS-Island nötig. ── */}
+      <Reveal as="section" className="py-20 sm:py-24 px-5 bg-zinc-950 border-t border-zinc-900">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
+            <p className="text-amber-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-3">
+              {lang === 'en' ? 'Osss in 60 seconds' : 'Osss in 60 Sekunden'}
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-3">
+              {lang === 'en'
+                ? 'This is your gym without the paperwork.'
+                : 'So sieht dein Gym ohne Papierkram aus.'}
+            </h2>
+            <p className="text-zinc-400 max-w-md mx-auto text-sm leading-relaxed">
+              {lang === 'en'
+                ? 'The whole Osss workflow in one short clip — best with the sound on.'
+                : 'Der ganze Osss-Workflow in einem kurzen Clip — am besten mit Ton.'}
+            </p>
+          </div>
+          <div className="relative aspect-video rounded-2xl overflow-hidden bg-black ring-1 ring-white/10 shadow-2xl shadow-amber-500/10">
+            <video
+              controls
+              preload="metadata"
+              playsInline
+              poster="/osss-werbevideo-poster.jpg"
+              className="w-full h-full object-cover"
+            >
+              <source src="/osss-werbevideo.mp4" type="video/mp4" />
+              {lang === 'en'
+                ? 'Your browser does not support the video tag.'
+                : 'Dein Browser unterstützt kein Video.'}
+            </video>
+          </div>
+        </div>
+      </Reveal>
+
       {/* Audit 2026-05-13: Pilot-Discount-Strip (PILOT10, 40 % lebenslang) entfernt. */}
 
       {/* ── MAAT VERGLEICH — direkter Conversion-Hebel direkt unter dem Hero.
