@@ -345,7 +345,9 @@ export class PaywiseProvider implements InkassoProvider {
       })
       const cJson = (await cRes.json().catch(() => ({}))) as Record<string, unknown>
       if (!cRes.ok || typeof cJson.id !== 'string') {
-        return { ok: false, raw: cJson, error: `Company-Anlage fehlgeschlagen (HTTP ${cRes.status})` }
+        const detail = JSON.stringify(cJson).slice(0, 300)
+        console.error('[paywise] Company-Anlage HTTP', cRes.status, detail)
+        return { ok: false, raw: cJson, error: `Company-Anlage fehlgeschlagen (HTTP ${cRes.status}): ${detail}` }
       }
       const companyId = cJson.id
 
@@ -361,7 +363,9 @@ export class PaywiseProvider implements InkassoProvider {
       })
       const uJson = (await uRes.json().catch(() => ({}))) as Record<string, unknown>
       if (!uRes.ok || typeof uJson.id !== 'string') {
-        return { ok: false, companyId, raw: uJson, error: `User-Anlage fehlgeschlagen (HTTP ${uRes.status})` }
+        const detail = JSON.stringify(uJson).slice(0, 300)
+        console.error('[paywise] User-Anlage HTTP', uRes.status, detail)
+        return { ok: false, companyId, raw: uJson, error: `User-Anlage fehlgeschlagen (HTTP ${uRes.status}): ${detail}` }
       }
       const userId = uJson.id
 
