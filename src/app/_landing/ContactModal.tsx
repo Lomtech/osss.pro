@@ -155,7 +155,13 @@ export function ContactModal({ lang, onClose }: { lang: 'de' | 'en'; onClose: ()
                 placeholder={isEn ? 'Tell us what you need…' : 'Schreib uns, was du brauchst…'}
                 className="w-full px-3 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-y"
               />
-              <p className="text-[10px] text-zinc-400 mt-1">{message.length}/10.000 {isEn ? 'characters' : 'Zeichen'}</p>
+              <p className="text-[10px] mt-1">
+                {message.trim().length > 0 && message.trim().length < 10 ? (
+                  <span className="text-amber-600">{isEn ? 'At least 10 characters' : 'Mindestens 10 Zeichen'} · {message.trim().length}/10</span>
+                ) : (
+                  <span className="text-zinc-400">{message.length}/10.000 {isEn ? 'characters' : 'Zeichen'}</span>
+                )}
+              </p>
             </div>
             {/* Honeypot — versteckt vor Usern, aber Bots füllen alle Felder */}
             <input
@@ -180,7 +186,7 @@ export function ContactModal({ lang, onClose }: { lang: 'de' | 'en'; onClose: ()
                 className="flex-1 py-3 rounded-xl border border-zinc-200 text-zinc-600 text-sm font-semibold hover:bg-zinc-50 disabled:opacity-50">
                 {isEn ? 'Cancel' : 'Abbrechen'}
               </button>
-              <button onClick={send} disabled={busy || !valid}
+              <button onClick={send} disabled={busy}
                 className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-300 disabled:cursor-not-allowed text-zinc-950 font-bold text-sm flex items-center justify-center gap-2 transition-colors">
                 {busy ? (
                   <>
