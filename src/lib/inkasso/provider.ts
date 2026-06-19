@@ -118,6 +118,12 @@ export interface InkassoProvider {
   verifyWebhook?(rawBody: string, headers: Record<string, string>): boolean
   /** parse an inbound webhook into status updates; null if unrecognised */
   parseWebhook?(payload: unknown, headers: Record<string, string>): StatusUpdate[] | null
+  /** For providers with PER-TENANT webhook secrets (e.g. Paywise: one webhook +
+   *  secret per gym/company): extract the tenant id from the raw body so the
+   *  receiver can look up that tenant's secret. Return null if not applicable. */
+  getWebhookTenantId?(rawBody: string): string | null
+  /** Verify a webhook against an explicitly supplied (per-tenant) secret. */
+  verifyWebhookWithSecret?(rawBody: string, headers: Record<string, string>, secret: string): boolean
 }
 
 const registry = new Map<string, InkassoProvider>()

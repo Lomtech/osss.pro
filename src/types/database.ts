@@ -189,6 +189,9 @@ export interface Database {
           paywise_user_id: string | null
           paywise_status: string | null
           paywise_consent_at: string | null
+          // Paywise-Webhook pro Gym (Migration 0020)
+          paywise_webhook_id: string | null
+          paywise_webhook_secret: string | null
         }
         Insert: {
           owner_id: string

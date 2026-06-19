@@ -59,6 +59,10 @@ export interface PaywiseOnboardResult {
   companyId?: string
   userId?: string
   dataSubmissionCompleted?: boolean
+  /** Pro-Gym-Webhook (Company-Scope). secret_key kommt NUR einmalig bei Anlage
+   *  zurück → muss am Gym gespeichert werden (sonst nicht mehr abrufbar). */
+  webhookId?: string
+  webhookSecret?: string
   raw: unknown
   error?: string
 }
@@ -240,13 +244,35 @@ export class PaywiseProvider implements InkassoProvider {
 
   // ── Webhook (HMAC-SHA256, Header X-Paywise-Signature: sha256=<hex>) ──────────
 
+  // Env-Secret-Pfad (Single-Tenant / Fallback). Im Partner-Modell hat jedes Gym
+  // ein EIGENES Webhook-Secret → der Receiver nutzt verifyWebhookWithSecret mit
+  // dem pro-Gym gespeicherten Secret (siehe getWebhookTenantId).
   verifyWebhook(rawBody: string, headers: Record<string, string>): boolean {
     if (!this.webhookSecret) return false
+    return this.verifyWebhookWithSecret(rawBody, headers, this.webhookSecret)
+  }
+
+  /** Reine HMAC-SHA256-Prüfung gegen ein explizit übergebenes (pro-Gym) Secret. */
+  verifyWebhookWithSecret(rawBody: string, headers: Record<string, string>, secret: string): boolean {
+    if (!secret) return false
     const sig = headers['x-paywise-signature'] ?? ''
     if (!sig.startsWith('sha256=')) return false
     const received = sig.slice('sha256='.length)
-    const expected = createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex')
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
     return constantTimeEqualHex(received, expected)
+  }
+
+  /** company_id aus dem (noch unverifizierten) Body ziehen, damit der Receiver
+   *  das Gym-spezifische Webhook-Secret nachschlagen kann. Eine gefälschte
+   *  company_id matcht später keine gültige Signatur → unkritisch. */
+  getWebhookTenantId(rawBody: string): string | null {
+    try {
+      const p = JSON.parse(rawBody) as Record<string, unknown>
+      const data = (p?.data && typeof p.data === 'object' ? p.data : {}) as Record<string, unknown>
+      return typeof data.company_id === 'string' ? data.company_id : null
+    } catch {
+      return null
+    }
   }
 
   parseWebhook(payload: unknown): StatusUpdate[] | null {
@@ -337,12 +363,38 @@ export class PaywiseProvider implements InkassoProvider {
       if (!uRes.ok || typeof uJson.id !== 'string') {
         return { ok: false, companyId, raw: uJson, error: `User-Anlage fehlgeschlagen (HTTP ${uRes.status})` }
       }
+      const userId = uJson.id
+
+      // 3) Webhook für DIESES Gym registrieren (Company-Scope via X-User-Id).
+      //    Paywise-Webhooks sind pro Kundenorganisation (Gym) → einmalig bei Anlage.
+      //    secret_key kommt NUR hier zurück. Best-effort: schlägt es fehl, ist das
+      //    Gym trotzdem onboardet (Webhook kann später nachgezogen werden).
+      let webhookId: string | undefined
+      let webhookSecret: string | undefined
+      try {
+        const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.osss.pro').replace(/\/$/, '')
+        const whRes = await this.cm('/webhooks/', 'POST', {
+          url: `${appUrl}/api/inkasso/webhook/paywise`,
+          events: ['mandate.status_updated', 'mandate.closed'],
+          description: `osss.pro — ${input.gym.name}`,
+        }, userId)
+        if (whRes.ok) {
+          if (typeof whRes.json.secret_key === 'string') webhookSecret = whRes.json.secret_key
+          if (typeof whRes.json.id === 'string') webhookId = whRes.json.id
+        } else {
+          console.error('[paywise] Webhook-Anlage fehlgeschlagen (non-fatal):', whRes.status, whRes.json)
+        }
+      } catch (e) {
+        console.error('[paywise] Webhook-Anlage Exception (non-fatal):', e instanceof Error ? e.message : e)
+      }
 
       return {
         ok: true,
         companyId,
-        userId: uJson.id,
+        userId,
         dataSubmissionCompleted: cJson.data_submission_completed === true,
+        webhookId,
+        webhookSecret,
         raw: { company: cJson, user: uJson },
       }
     } catch (e) {

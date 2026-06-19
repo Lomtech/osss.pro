@@ -278,3 +278,28 @@ describe('PaywiseProvider — reportPayment', () => {
     expect(body.value_date).toBe('2026-06-18')
   })
 })
+
+describe('PaywiseProvider — per-tenant webhook (per-gym secret)', () => {
+  const pw = new PaywiseProvider({ apiToken: 'tok' }) // kein Env-Webhook-Secret
+  const body = '{"event":"mandate.closed","data":{"company_id":"comp_42","reason":"paid"}}'
+
+  test('getWebhookTenantId extracts data.company_id', () => {
+    expect(pw.getWebhookTenantId(body)).toBe('comp_42')
+    expect(pw.getWebhookTenantId('{"event":"x","data":{}}')).toBeNull()
+    expect(pw.getWebhookTenantId('not json')).toBeNull()
+  })
+
+  test('verifyWebhookWithSecret validates against an explicit per-gym secret', () => {
+    const secret = 'gym_secret_abc'
+    const sig = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
+    expect(pw.verifyWebhookWithSecret(body, { 'x-paywise-signature': sig }, secret)).toBe(true)
+    expect(pw.verifyWebhookWithSecret(body, { 'x-paywise-signature': sig }, 'wrong_secret')).toBe(false)
+    expect(pw.verifyWebhookWithSecret(body + ' ', { 'x-paywise-signature': sig }, secret)).toBe(false)
+    expect(pw.verifyWebhookWithSecret(body, { 'x-paywise-signature': sig }, '')).toBe(false)
+  })
+
+  test('env-secret verifyWebhook stays false when no env secret configured', () => {
+    const sig = 'sha256=' + createHmac('sha256', 'x').update(body).digest('hex')
+    expect(pw.verifyWebhook(body, { 'x-paywise-signature': sig })).toBe(false)
+  })
+})

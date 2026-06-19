@@ -99,6 +99,8 @@ export async function POST(req: Request) {
       paywise_user_id: result.userId,
       paywise_status: result.dataSubmissionCompleted ? 'active' : 'pending',
       paywise_consent_at: nowIso,
+      paywise_webhook_id: result.webhookId ?? null,
+      paywise_webhook_secret: result.webhookSecret ?? null,
     })
     .eq('id', gym.id)
   if (updErr) {

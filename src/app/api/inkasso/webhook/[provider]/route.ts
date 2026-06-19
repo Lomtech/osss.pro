@@ -38,8 +38,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   const headers: Record<string, string> = {}
   req.headers.forEach((v, k) => { headers[k.toLowerCase()] = v })
 
-  // 1. Authenticity — adapter verifies signature / shared secret
-  if (!adapter.verifyWebhook || !adapter.verifyWebhook(rawBody, headers)) {
+  const service = createServiceClient()
+
+  // 1. Authenticity. Provider mit PER-TENANT-Secret (Paywise: ein Webhook + Secret
+  //    pro Gym/Company): tenant-id (company_id) aus dem Body ziehen → das pro-Gym
+  //    gespeicherte Secret nachschlagen → damit HMAC verifizieren. Eine gefälschte
+  //    company_id matcht kein gültiges Secret. Sonst: globaler verifyWebhook
+  //    (Env-Secret / Sandbox-Shared-Secret).
+  let verified = false
+  if (adapter.getWebhookTenantId && adapter.verifyWebhookWithSecret) {
+    const tenantId = adapter.getWebhookTenantId(rawBody)
+    if (tenantId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: gym } = await (service.from('gyms') as any)
+        .select('paywise_webhook_secret')
+        .eq('paywise_company_id', tenantId)
+        .maybeSingle()
+      const secret = gym?.paywise_webhook_secret
+      if (secret) verified = adapter.verifyWebhookWithSecret(rawBody, headers, secret)
+    }
+    // Fallback aufs Env-Secret, falls (noch) kein pro-Gym-Secret hinterlegt ist
+    if (!verified && adapter.verifyWebhook) verified = adapter.verifyWebhook(rawBody, headers)
+  } else {
+    verified = adapter.verifyWebhook?.(rawBody, headers) ?? false
+  }
+  if (!verified) {
     return NextResponse.json({ error: 'Signatur ungültig' }, { status: 401 })
   }
 
@@ -51,12 +74,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
     return NextResponse.json({ error: 'Body ist kein gültiges JSON' }, { status: 400 })
   }
   const updates = adapter.parseWebhook?.(payload, headers) ?? null
-  if (!updates || updates.length === 0) {
-    return NextResponse.json({ error: 'Keine verwertbaren Status-Updates' }, { status: 400 })
+  if (updates === null) {
+    return NextResponse.json({ error: 'Body ist kein verwertbares Event' }, { status: 400 })
+  }
+  // Erkanntes Event ohne Status-Transition → ACK (200), damit der Provider nicht
+  // unnötig retryt (statt früherem 400).
+  if (updates.length === 0) {
+    return NextResponse.json({ ok: true, applied: 0, note: 'acknowledged (no status transition)' })
   }
 
   // 3. Apply each update to the matching handoff (by provider + reference_id)
-  const service = createServiceClient()
   const nowIso = new Date().toISOString()
   let applied = 0
   const misses: string[] = []
