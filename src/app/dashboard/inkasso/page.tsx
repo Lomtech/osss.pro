@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { FileWarning, ArrowRight, Loader2, AlertTriangle } from 'lucide-react'
 import { DunningPanel } from '@/components/DunningPanel'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { InkassoSettingsTab } from './_components/InkassoSettingsTab'
 
 interface DunningMember {
   id: string
@@ -33,6 +34,7 @@ export default function InkassoPage() {
   const [members, setMembers] = useState<DunningMember[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<DunningMember | null>(null)
+  const [tab, setTab] = useState<'cases' | 'settings'>('cases')
 
   useEffect(() => { void load() }, [])
 
@@ -109,6 +111,19 @@ export default function InkassoPage() {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-zinc-200">
+        <button onClick={() => setTab('cases')} className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === 'cases' ? 'border-amber-500 text-amber-600' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
+          {lang === 'en' ? 'Cases' : 'Fälle'}
+        </button>
+        <button onClick={() => setTab('settings')} className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === 'settings' ? 'border-amber-500 text-amber-600' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
+          {lang === 'en' ? 'Settings' : 'Einstellungen'}
+        </button>
+      </div>
+
+      {tab === 'settings' && <InkassoSettingsTab />}
+
+      {tab === 'cases' && (<>
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <KPI label={t.kpiOpenCases} value={String(members.length)} tone="amber" />
@@ -203,6 +218,7 @@ export default function InkassoPage() {
           )}
         </div>
       </div>
+      </>)}
     </div>
   )
 }

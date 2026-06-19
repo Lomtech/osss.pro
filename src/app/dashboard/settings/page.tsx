@@ -37,8 +37,6 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { useToast } from '@/components/Toast'
 import { UpgradeModal } from './_components/UpgradeModal'
 import { SectionHeader, CopyRow, inputCls, saveBtnCls, sectionCls, sectionHeaderCls } from './_components/SettingsUI'
-import { DunningSection } from './_components/DunningSection'
-import { InkassoConnectSection } from './_components/InkassoConnectSection'
 import { DatevSection } from './_components/DatevSection'
 import { GpsSection } from './_components/GpsSection'
 import { AccountDeleteSection } from './_components/AccountDeleteSection'
@@ -89,13 +87,6 @@ function SettingsPageInner() {
   const [initialLegalEmail, setInitialLegalEmail]     = useState<string | null | undefined>(undefined)
   const [initialDatevBerater, setInitialDatevBerater] = useState<string | null | undefined>(undefined)
   const [initialDatevMandant, setInitialDatevMandant] = useState<string | null | undefined>(undefined)
-  const [initialDunningLateFeeCents, setInitialDunningLateFeeCents] = useState<number | null | undefined>(undefined)
-  const [initialDunningDaysL2, setInitialDunningDaysL2] = useState<number | null | undefined>(undefined)
-  const [initialDunningDaysL3, setInitialDunningDaysL3] = useState<number | null | undefined>(undefined)
-  const [initialDunningAutoInkasso, setInitialDunningAutoInkasso] = useState<boolean | null | undefined>(undefined)
-  const [initialDunningDaysToInkasso, setInitialDunningDaysToInkasso] = useState<number | null | undefined>(undefined)
-  const [initialPaywiseConnected, setInitialPaywiseConnected] = useState(false)
-  const [initialPaywiseStatus, setInitialPaywiseStatus] = useState<string | null>(null)
   const [initialGpsLat, setInitialGpsLat]   = useState<number | null>(null)
   const [initialGpsLng, setInitialGpsLng]   = useState<number | null>(null)
   const [initialGpsRadius, setInitialGpsRadius] = useState<number | null | undefined>(undefined)
@@ -294,21 +285,6 @@ function SettingsPageInner() {
         setBankName(data.bank_name ?? '')
         setInitialDatevBerater(data.datev_beraternummer ?? '')
         setInitialDatevMandant(data.datev_mandantennummer ?? '')
-        // Inkasso-Defaults werden in DunningSection selbst auf 10 €/14d/28d gefallen.
-        const lateFeeCents = (data as { dunning_late_fee_cents?: number | null }).dunning_late_fee_cents
-        setInitialDunningLateFeeCents(lateFeeCents ?? null)
-        const daysL2 = (data as { dunning_days_to_level_2?: number | null }).dunning_days_to_level_2
-        setInitialDunningDaysL2(daysL2 ?? null)
-        const daysL3 = (data as { dunning_days_to_level_3?: number | null }).dunning_days_to_level_3
-        setInitialDunningDaysL3(daysL3 ?? null)
-        const autoInk = (data as { dunning_auto_inkasso_enabled?: boolean | null }).dunning_auto_inkasso_enabled
-        setInitialDunningAutoInkasso(autoInk ?? null)
-        const daysInk = (data as { dunning_days_to_inkasso?: number | null }).dunning_days_to_inkasso
-        setInitialDunningDaysToInkasso(daysInk ?? null)
-        const pwCompany = (data as { paywise_company_id?: string | null }).paywise_company_id
-        setInitialPaywiseConnected(Boolean(pwCompany))
-        const pwStatus = (data as { paywise_status?: string | null }).paywise_status
-        setInitialPaywiseStatus(pwStatus ?? null)
         const rawClassTypes = data.class_types
         if (Array.isArray(rawClassTypes)) setClassTypesInput(rawClassTypes.join(', '))
         const savedSport = data.sport_type as SportType | undefined
@@ -1078,18 +1054,6 @@ function SettingsPageInner() {
           <DatevSection
             initialBeraternummer={initialDatevBerater}
             initialMandantennummer={initialDatevMandant}
-          />
-
-          <DunningSection
-            initialLateFeeCents={initialDunningLateFeeCents}
-            initialDaysL2={initialDunningDaysL2}
-            initialDaysL3={initialDunningDaysL3}
-            initialAutoInkasso={initialDunningAutoInkasso}
-            initialDaysToInkasso={initialDunningDaysToInkasso}
-          />
-          <InkassoConnectSection
-            initialConnected={initialPaywiseConnected}
-            initialStatus={initialPaywiseStatus}
           />
 
           <LegalSection
