@@ -5,12 +5,11 @@ import { Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { DunningSection } from '../../settings/_components/DunningSection'
 import { InkassoConnectSection } from '../../settings/_components/InkassoConnectSection'
-import { VerzugszinsenSection } from './VerzugszinsenSection'
 
 /**
  * „Einstellungen"-Tab der Inkasso-Zentrale — bündelt alles, was vorher über die
- * Settings-Seite verstreut war: Mahnstufen/Gebühren + Auto-Übergabe (DunningSection),
- * Verzugszinsen, Paywise-Verbindung. Lädt das Gym EINMAL und rendert erst dann,
+ * Settings-Seite verstreut war: Mahnstufen/Gebühren + Auto-Übergabe (DunningSection)
+ * und Paywise-Verbindung. Lädt das Gym EINMAL und rendert erst dann,
  * damit die Sektionen mit korrekten Initialwerten mounten.
  */
 export function InkassoSettingsTab() {
@@ -44,7 +43,6 @@ export function InkassoSettingsTab() {
         initialAutoInkasso={gym?.dunning_auto_inkasso_enabled as boolean | null | undefined}
         initialDaysToInkasso={gym?.dunning_days_to_inkasso as number | null | undefined}
       />
-      <VerzugszinsenSection />
       <InkassoConnectSection
         initialConnected={Boolean(gym?.paywise_company_id)}
         initialStatus={(gym?.paywise_status as string | null) ?? null}
