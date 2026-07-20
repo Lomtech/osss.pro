@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Node 22 LTS — Next.js 16.2 verlangt ≥20.9, wir nehmen 22 für mehr Headroom
           # und stabilere npm-Version (ships with npm 10.9+).
