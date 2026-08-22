@@ -52,6 +52,14 @@ export const GET = withCronSentry('sales-followups', async (req: Request) => {
   // gesetzt werden muss. Performance ist OK bei <10k aktiven Leads (CRM-Skala).
   const sequenced = await runAutoSequence(supabase, now)
 
+  // Tagesübersicht-Mail standardmäßig AUS (Owner-Wunsch 2026-08: die tägliche
+  // Sales-CRM-Erinnerung nicht mehr verschicken). Das Pipeline-Auto-Stepping
+  // (Phase 1) oben läuft unverändert weiter — nur der Mail-Versand entfällt.
+  // Wieder aktivieren: Env SALES_DIGEST_ENABLED=true setzen.
+  if (process.env.SALES_DIGEST_ENABLED !== 'true') {
+    return NextResponse.json({ ok: true, sequenced, mailSkipped: 'digest disabled (SALES_DIGEST_ENABLED != true)' })
+  }
+
   // ─── PHASE 2: Reminder-Mail an Admin ─────────────────────────────────
   const adminEmails = (process.env.ADMIN_EMAILS ?? '')
     .split(',').map(e => e.trim()).filter(Boolean)
